@@ -13,11 +13,11 @@
 
   "items": {
     "COMMAND_1": {
-      "title": { "default": "Command One" },
+      "title": { "default": "Sign with Signeer" },
       "type": "command"
     },
     "COMMAND_2": {
-      "title": { "default": "Command Two update v7" },
+      "title": { "default": "Check version v7" },
       "type": "command"
     }
   }

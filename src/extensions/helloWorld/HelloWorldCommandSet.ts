@@ -38,13 +38,10 @@ export default class HelloWorldCommandSet extends BaseListViewCommandSet<IHelloW
   }
 
   public onExecute(event: IListViewCommandSetExecuteEventParameters): void {
-    console.log("sharepoint framework ....");
     switch (event.itemId) {
-      case "COMMAND_1":
-        let selectedItemUrl = event.selectedRows[0].getValueByName("FileRef");
+      case "COMMAND_1": {
+        const selectedItemUrl = event.selectedRows[0].getValueByName("FileRef");
         const fileName = event.selectedRows[0].getValueByName("FileLeafRef");
-        console.log(fileName);
-
         this.context.spHttpClient
           .get(
             `${this.context.pageContext.web.absoluteUrl}/_api/web/GetFileByServerRelativeUrl('${selectedItemUrl}')/$value`,
@@ -57,57 +54,62 @@ export default class HelloWorldCommandSet extends BaseListViewCommandSet<IHelloW
             }
           )
           .then((response: SPHttpClientResponse) => {
-            console.log("get file from microsoft ok");
+            if (!response.ok) {
+              throw new Error(`Failed to fetch file: ${response.statusText}`);
+            }
+            console.log("get file from Microsoft ok");
             return response.blob();
           })
           .then((fileBlob: Blob) => {
-            console.log("sent file to my app");
-            this._uploadToServer(fileBlob, fileName);
+            console.log("sent file to signeer");
+            this.signWithSigneer(fileBlob, fileName);
+          })
+          .catch((error) => {
+            console.error(
+              "There was an error during the file fetching or signing process:",
+              error
+            );
           });
-        // window.open(
-        //   "http://localhost:4201/signature-platform/manage-signing-cases",
-        //   "_blank"
-        // );
         break;
+      }
       case "COMMAND_2":
-        // Dialog.prompt(`Clicked test. Enter something to alert:`).then(
-        //   (value: string) => {
-        //     Dialog.alert(value);
-        //   }
-        // );
-        console.log("COMMAND_2 is clicked");
+        console.log("do COMMAND_2");
         break;
       default:
         throw new Error("Unknown command");
     }
   }
 
-  private _uploadToServer(fileBlob: Blob, documentName: string): void {
+  private signWithSigneer(fileBlob: Blob, documentName: string): void {
+    console.log("call signWithSigneer.........");
     const formData = new FormData();
     formData.append("file", fileBlob, documentName);
-    const enterpriseId = "bccf1f01-552e-4672-b81b-0c10927ffd4b";
-    const organizationId = "bb7dcb58-d3d5-432f-9a00-af1020097a74";
-    const documentBasketId = "e9a3a1a3-aadd-4dff-add4-63c1849a3042";
+    formData.append(
+      "data",
+      new Blob(
+        [JSON.stringify({ email: this.context.pageContext.user.email })],
+        { type: "application/json" }
+      )
+    );
 
     fetch(
-      "http://localhost:8080/internal/signature-platform/" +
-        enterpriseId +
-        "/organizations/" +
-        organizationId +
-        "/document-baskets/" +
-        documentBasketId +
-        "/documents",
+      "http://localhost:8080/internal/signature-platform/signing-case/document-baskets/sign-with-signeer",
       {
         method: "POST",
         body: formData,
       }
     )
       .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((res) => {
         console.log("Document uploaded successfully");
-        // Dialog.alert("Document uploaded successfully!");
+        window.open(res.location, "_blank");
       })
       .catch((error) => {
-        // Dialog.alert("Error uploading document.");
         console.error("Error:", error);
       });
   }
@@ -119,14 +121,23 @@ export default class HelloWorldCommandSet extends BaseListViewCommandSet<IHelloW
 
     const compareOneCommand: Command = this.tryGetCommand("COMMAND_1");
     if (compareOneCommand) {
-      // This command should be hidden unless exactly one row is selected.
-      compareOneCommand.visible =
-        this.context.listView.selectedRows?.length === 1;
+      const selectedRows = this.context.listView.selectedRows;
+      if (selectedRows?.length === 1) {
+        const selectedItem = selectedRows[0];
+
+        const fileName: string = selectedItem.getValueByName("FileLeafRef");
+        const fileSize: number = selectedItem.getValueByName("File_x0020_Size");
+
+        const isPdfFile = fileName.toLowerCase().endsWith(".pdf");
+        const isFileSizeValid = fileSize <= 5 * 1024 * 1024;
+
+        compareOneCommand.visible = isPdfFile && isFileSizeValid;
+      } else {
+        compareOneCommand.visible = false;
+      }
+
+      // You should call this.raiseOnChage() to update the command bar
+      this.raiseOnChange();
     }
-
-    // TODO: Add your logic here
-
-    // You should call this.raiseOnChage() to update the command bar
-    this.raiseOnChange();
   };
 }
